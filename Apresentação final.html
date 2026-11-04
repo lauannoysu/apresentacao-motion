@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Puppet Tool — Dando vida a imagens estáticas</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* ===== TOKENS (edite aqui as cores e fontes) ===== */
+:root{--bg:#f4f3ef;--bl:#bcd6ee;--bl2:#e2eef8;--ink:#25282c;--ce:#8a8e8e;--ce2:#d2d5d4;--ac:#2f7de1;
+--sans:'Inter Tight','Helvetica Neue',Arial,sans-serif;--serif:'Instrument Serif',Georgia,serif;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#1c1e21;overflow:hidden;font-family:var(--sans);color:var(--ink)}
+#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+.slide{position:absolute;inset:0;background:var(--bg);overflow:hidden;opacity:0;visibility:hidden;transform:scale(1.025);transition:opacity .7s,transform 1s cubic-bezier(.2,.7,.2,1),visibility 0s .8s}
+.slide.on{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+.a{position:absolute}
+h1,h2,h3,p{margin:0}
+.big{font-weight:600;letter-spacing:-.055em;line-height:.88;white-space:nowrap}
+.serif{font-family:var(--serif);font-style:italic;font-weight:400;letter-spacing:-.03em}
+.mono{font:500 17px/1.5 var(--mono);letter-spacing:.04em;color:var(--ce)}
+.rv{opacity:0;transform:translateY(34px);transition:opacity .6s,transform .7s}
+.on .rv{opacity:1;transform:none;transition:opacity .9s calc(var(--i,0)*90ms + 300ms),transform 1.1s cubic-bezier(.2,.7,.2,1) calc(var(--i,0)*90ms + 300ms)}
+.guide{position:absolute;background:var(--ac);opacity:.35}
+.bb{position:absolute;border:1.5px solid var(--ac);pointer-events:none}
+.hd{position:absolute;width:14px;height:14px;background:#fff;border:1.5px solid var(--ac);transform:translate(-50%,-50%)}
+.chip{display:inline-block;border:1.5px solid var(--ink);border-radius:99px;padding:9px 22px;font-size:23px;margin:0 10px 12px 0}
+.pn{background:rgba(255,255,255,.62);border:1.5px solid var(--ce2)}
+.slot{overflow:hidden;background:#1c1e21;border:1.5px solid #5b6064;cursor:pointer}.slot .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;margin:0;color:#9aa0a2;font-size:18px}
+.tx{font-size:26px;line-height:1.35;color:#4a4e52}
+kbd{font:500 22px var(--mono);border:1.5px solid var(--ink);border-bottom-width:4px;border-radius:8px;padding:3px 12px;background:#fff}
+.num{font:400 120px/1 var(--serif);font-style:italic;color:transparent;-webkit-text-stroke:1.5px var(--ink)}
+.ph{position:absolute;left:100px;top:920px;width:2px;height:150px;background:var(--ac);z-index:3}
+.ph::before{content:"";position:absolute;left:-9px;top:-2px;border:10px solid transparent;border-top:16px solid var(--ac);border-bottom:0}
+.on .ph{animation:ph 8s linear infinite alternate}
+@keyframes ph{to{transform:translateX(1720px)}}
+.pulse{transform-box:fill-box;transform-origin:center;animation:pu 2.2s ease-out infinite}
+@keyframes pu{0%{transform:scale(.6);opacity:.9}100%{transform:scale(2.4);opacity:0}}
+.spin{transform-box:fill-box;transform-origin:center;animation:sp 6s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.dr{animation:dr 2.4s .8s both}
+@keyframes dr{from{stroke-dasharray:0 1}to{stroke-dasharray:1 1}}
+/* ===== UI ===== */
+.ui{position:fixed;z-index:20;font:500 15px var(--mono)}
+#bar{left:0;top:0;height:4px;background:var(--ac);width:0;transition:width .6s}
+#ctl{left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:6px;align-items:center;background:rgba(28,30,33,.78);backdrop-filter:blur(10px);border-radius:99px;padding:6px 8px;opacity:.3;transition:opacity .3s}
+#ctl:hover{opacity:1}
+#ctl button{all:unset;cursor:pointer;color:#fff;padding:7px 14px;border-radius:99px}
+#ctl button:hover,#ctl button:focus-visible{background:rgba(255,255,255,.18)}
+#cnt{color:#fff;padding:0 8px}
+#notes{left:50%;bottom:70px;transform:translateX(-50%);width:min(900px,90vw);background:rgba(28,30,33,.92);color:#fff;font:400 18px/1.5 var(--sans);padding:16px 22px;border-radius:14px;display:none}
+#toast{left:50%;top:24px;transform:translateX(-50%);background:#fff;color:var(--ink);padding:14px 22px;border-radius:12px;box-shadow:0 10px 40px #0004;opacity:0;pointer-events:none;transition:opacity .4s;max-width:80vw;text-align:center}
+@page{size:1920px 1080px;margin:0}
+@media print{
+html,body{height:auto;overflow:visible;background:none}
+#stage{position:static;transform:none!important;width:1920px;height:auto}
+.slide{position:relative;opacity:1!important;visibility:visible!important;transform:none!important;height:1080px;break-after:page;page-break-after:always}
+.slide:last-child{break-after:auto;page-break-after:auto}
+.rv{opacity:1!important;transform:none!important}
+*{animation:none!important;transition:none!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.dr{stroke-dasharray:1 1}.ph{transform:translateX(560px)}
+.ui{display:none!important}}
+@media (prefers-reduced-motion:reduce){.pulse,.spin{animation:none}}
+</style>
+</head>
+<body>
+<div id="stage">
+
+<!-- 1 · INTRODUÇÃO -->
+<section class="slide on" id="s1">
+  <div class="a" style="left:1040px;top:60px;width:920px;height:920px;border-radius:50%;background:var(--bl)"></div>
+  <div class="a" style="left:1180px;top:-420px;width:760px;height:760px;border-radius:50%;border:1.5px solid var(--ink);opacity:.18"></div>
+  <div class="guide" style="left:100px;top:0;width:1px;height:1080px"></div>
+  <div class="guide" style="left:0;top:800px;width:1920px;height:1px"></div>
+  <svg class="a" id="m1" style="left:960px;top:70px" width="900" height="900" viewBox="0 0 900 900"></svg>
+  <p class="mono a rv" style="left:130px;top:70px">After Effects · Puppet Pin Tool</p>
+  <p class="mono a rv" style="right:100px;top:70px;--i:1">Aula de motion design</p>
+  <p class="a rv" style="left:130px;top:920px;font-size:30px;font-weight:500;letter-spacing:-.01em;--i:4;z-index:4">Apresentação de <span class="serif" style="color:var(--ac);font-size:36px">Lauan Santos</span> e <span class="serif" style="color:var(--ac);font-size:36px">Kauã Felipe</span></p>
+  <h1 class="a big rv" style="left:90px;top:210px;font-size:300px;--i:1">Puppet</h1>
+  <h1 class="a big serif rv" style="left:430px;top:470px;font-size:300px;color:var(--ac);--i:2">Tool</h1>
+  <div class="bb" style="left:410px;top:490px;width:660px;height:290px"></div>
+  <p class="mono a" style="left:420px;top:795px;color:var(--ac)">Tool · escala 100%</p>
+  <p class="a rv" style="left:130px;top:840px;font-size:48px;font-weight:500;letter-spacing:-.02em;--i:3">Dando vida a imagens estáticas.</p>
+  <p class="mono a" id="r1" style="left:1500px;top:900px;color:var(--ink)"></p>
+  <svg class="tl a" style="left:0;top:940px;color:var(--ink)" data-kf="4,13,22,34" width="1920" height="140"></svg>
+  <div class="ph"></div>
+</section>
+
+<!-- 2 · DEFINIÇÃO -->
+<section class="slide" id="s2" data-time="1 min" data-notes="Imaginem uma marionete. Quando puxamos uma parte dela, conseguimos movimentar seus braços, pernas ou cabeça. A Puppet Tool funciona de forma parecida, mas digitalmente. Colocamos pontos na imagem e movimentamos esses pontos para criar a animação." style="background:linear-gradient(90deg,var(--bg) 0 52%,var(--bl2) 52%)">
+  <div class="a" style="left:1000px;top:-160px;width:1100px;height:1100px;border-radius:50%;border:1.5px solid var(--ink);opacity:.15"></div>
+  <svg class="a" id="m2" style="left:1000px;top:60px" width="800" height="800" viewBox="0 0 800 800"></svg>
+  <p class="mono a rv" style="left:100px;top:80px">Definição</p>
+  <h2 class="a big rv" style="left:96px;top:150px;font-size:130px;--i:1">O que é a</h2>
+  <h2 class="a big serif rv" style="left:96px;top:270px;font-size:210px;color:var(--ac);--i:2">Puppet Tool?</h2>
+  <p class="a rv" style="left:100px;top:540px;width:780px;font-size:40px;line-height:1.28;letter-spacing:-.015em;--i:3">Também conhecida como ferramenta de marionete, permite deformar e animar elementos visuais por meio de pontos de controle chamados <b>pins</b>.</p>
+  <div class="a rv" style="left:100px;top:790px;width:960px;--i:4"><p class="mono" style="color:var(--ink);margin-bottom:14px">Ela pode ser utilizada para:</p><span class="chip">Animar personagens e ilustrações</span><span class="chip">Simular movimentos orgânicos</span><span class="chip">Movimentar partes específicas de uma imagem</span><span class="chip">Criar animações a partir de elementos estáticos</span></div>
+  <div class="a pn rv" style="left:1230px;top:640px;width:560px;padding:26px 30px;border-radius:18px;box-shadow:0 30px 60px -30px #2a4a6e66;--i:5">
+    <p class="mono" style="color:var(--ink)">Puppet › Mesh 1 › Pin 1</p>
+    <div style="display:flex;justify-content:space-between;font-size:28px;margin-top:18px"><span>Posição</span><span class="mono" id="rd2" style="font-size:26px;color:var(--ac)"></span></div>
+    <div style="display:flex;justify-content:space-between;font-size:28px;margin-top:12px"><span>Rotação</span><span class="mono" style="font-size:26px;color:var(--ink)">0x+12,0°</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:28px;margin-top:12px"><span>Escala</span><span class="mono" style="font-size:26px;color:var(--ink)">100%</span></div>
+  </div>
+</section>
+
+<!-- 3 · FUNCIONAMENTO -->
+<section class="slide" id="s3" data-time="1 min 15 s" data-notes="Primeiro, adicionamos os pins nas regiões que queremos controlar. O After Effects cria uma malha sobre a imagem, que permite deformá-la quando movimentamos esses pontos. Depois, utilizamos keyframes para definir onde cada ponto estará ao longo do tempo.">
+  <div class="a" style="left:-200px;top:760px;width:700px;height:700px;border-radius:50%;background:var(--bl2)"></div>
+  <p class="mono a rv" style="left:100px;top:80px">Funcionamento</p>
+  <h2 class="a big rv" style="left:96px;top:130px;font-size:150px;--i:1">Como <span class="serif" style="color:var(--ac)">funciona</span></h2>
+  <p class="a tx rv" style="left:1330px;top:110px;width:490px;--i:2">Três elementos principais trabalham juntos para criar o movimento.</p>
+
+  <div class="a rv" style="left:100px;top:380px;width:500px;--i:2">
+    <svg class="pn" width="500" height="340" viewBox="0 0 500 340"><path d="M70 190C70 80 170 40 270 60C390 85 450 170 400 250C350 320 160 310 100 260C80 240 70 220 70 190Z" fill="rgba(188,214,238,.5)" stroke="#25282c" stroke-dasharray="6 6"/>
+      <g fill="#2f7de1"><circle cx="150" cy="190" r="8"/><circle cx="330" cy="120" r="8"/><circle cx="310" cy="250" r="8"/></g>
+      <g fill="none" stroke="#2f7de1" stroke-width="2"><circle class="pulse" cx="150" cy="190" r="16"/><circle class="pulse" style="animation-delay:.7s" cx="330" cy="120" r="16"/><circle class="pulse" style="animation-delay:1.4s" cx="310" cy="250" r="16"/></g>
+      <text x="168" y="176" class="mono" font-size="15" fill="#8a8e8e" font-family="monospace">Pin 1</text><text x="348" y="106" font-size="15" fill="#8a8e8e" font-family="monospace">Pin 2</text><text x="328" y="276" font-size="15" fill="#8a8e8e" font-family="monospace">Pin 3</text></svg>
+    <h3 style="font-size:60px;letter-spacing:-.03em;margin-top:22px">Pins <span class="mono" style="font-size:20px">pontos de controle</span></h3>
+    <p class="tx" style="margin-top:6px">Pontos inseridos na imagem que controlam a deformação e o movimento.</p>
+  </div>
+  <p class="a serif" style="left:632px;top:520px;font-size:80px;color:var(--ac)">→</p>
+
+  <div class="a rv" style="left:710px;top:320px;width:500px;--i:3">
+    <svg class="pn" id="m3" width="500" height="340" viewBox="0 0 500 340"></svg>
+    <h3 style="font-size:60px;letter-spacing:-.03em;margin-top:22px">Mesh <span class="mono" style="font-size:20px">malha</span></h3>
+    <p class="tx" style="margin-top:6px">Malha de triângulos gerada pelo After Effects que permite deformar a imagem.</p>
+  </div>
+  <p class="a serif" style="left:1242px;top:460px;font-size:80px;color:var(--ac)">→</p>
+
+  <div class="a rv" style="left:1320px;top:440px;width:500px;--i:4">
+    <svg class="pn" width="500" height="340" viewBox="0 0 500 340"><path id="cv" d="M50 270C130 60 210 60 250 170S390 290 450 80" fill="none" stroke="#25282c" stroke-width="2" stroke-dasharray="3 8" stroke-linecap="round"/>
+      <g fill="#2f7de1"><path d="M50 258l12 12-12 12-12-12z"/><path d="M250 158l12 12-12 12-12-12z"/><path d="M450 68l12 12-12 12-12-12z"/></g>
+      <circle r="10" fill="#fff" stroke="#2f7de1" stroke-width="3"><animateMotion dur="4s" repeatCount="indefinite" calcMode="spline" keySplines=".5 0 .5 1" keyTimes="0;1"><mpath href="#cv"/></animateMotion></circle>
+      <text x="40" y="318" font-size="15" fill="#8a8e8e" font-family="monospace">0:00</text><text x="236" y="218" font-size="15" fill="#8a8e8e" font-family="monospace">0:02</text><text x="420" y="124" font-size="15" fill="#8a8e8e" font-family="monospace">0:04</text></svg>
+    <h3 style="font-size:60px;letter-spacing:-.03em;margin-top:22px">Keyframes <span class="mono" style="font-size:20px">quadros-chave</span></h3>
+    <p class="tx" style="margin-top:6px">Registram a posição dos pontos em momentos diferentes, criando o movimento.</p>
+  </div>
+</section>
+
+<!-- 4 · RECURSOS -->
+<section class="slide" id="s4" data-time="1 min 15 s" data-notes="A Puppet Tool possui diferentes tipos de pontos. O Position Pin é o mais utilizado, porque permite movimentar partes da imagem. O Starch Pin ajuda a evitar deformações indesejadas. Já o Bend Pin e o Advanced Pin oferecem controles mais específicos sobre a forma e o movimento. (Dica: não é preciso demonstrar todos; o Position Pin já permite uma animação interessante.)" style="background:#e4e7e7">
+  <div class="a" style="left:1300px;top:-300px;width:900px;height:900px;border-radius:50%;background:var(--bl);opacity:.7"></div>
+  <p class="mono a rv" style="left:100px;top:80px">Principais recursos</p>
+  <h2 class="a big rv" style="left:96px;top:130px;font-size:150px;--i:1">Quatro <span class="serif" style="color:var(--ac)">pins</span></h2>
+  <div class="a pn rv" style="left:100px;top:380px;width:400px;height:590px;padding:20px;border-radius:0 60px 0 0;--i:2"><svg id="m4a" width="360" height="300" viewBox="0 0 360 300"></svg>
+    <h3 style="font-size:40px;letter-spacing:-.03em;margin-top:24px">Puppet Position Pin</h3><p class="tx" style="margin-top:8px">Move e deforma partes da imagem.</p></div>
+  <div class="a pn rv" style="left:550px;top:440px;width:400px;height:590px;padding:20px;--i:3"><svg id="m4b" width="360" height="300" viewBox="0 0 360 300"></svg>
+    <h3 style="font-size:40px;letter-spacing:-.03em;margin-top:24px">Puppet Starch Pin</h3><p class="tx" style="margin-top:8px">Controla a rigidez de determinadas regiões.</p></div>
+  <div class="a pn rv" style="left:1000px;top:380px;width:400px;height:590px;padding:20px;border-radius:0 0 0 60px;--i:4"><svg id="m4c" width="360" height="300" viewBox="0 0 360 300"></svg>
+    <h3 style="font-size:40px;letter-spacing:-.03em;margin-top:24px">Puppet Bend Pin</h3><p class="tx" style="margin-top:8px">Permite controlar a rotação e a curvatura de regiões da malha.</p></div>
+  <div class="a pn rv" style="left:1450px;top:440px;width:400px;height:590px;padding:20px;border-radius:60px 0 0 0;--i:5"><svg id="m4d" width="360" height="300" viewBox="0 0 360 300"></svg>
+    <h3 style="font-size:40px;letter-spacing:-.03em;margin-top:24px">Puppet Advanced Pin</h3><p class="tx" style="margin-top:8px">Oferece controles adicionais, como escala e rotação.</p></div>
+</section>
+
+<!-- 5 · PASSO A PASSO -->
+<section class="slide" id="s5" data-time="1 min 30 s" data-notes="Para utilizar a Puppet Tool, primeiro importamos uma imagem, preferencialmente com fundo transparente. Depois selecionamos a ferramenta e adicionamos os pontos nas regiões desejadas. Por exemplo, para movimentar um braço, podemos colocar pontos no ombro, cotovelo e mão. Ao avançar na timeline e alterar a posição desses pontos, o After Effects cria os keyframes da animação.">
+  <div class="a" style="left:-260px;top:-260px;width:700px;height:700px;border-radius:50%;background:var(--bl2)"></div>
+  <p class="mono a rv" style="left:100px;top:80px">Passo a passo</p>
+  <h2 class="a big rv" style="left:96px;top:130px;font-size:130px;--i:1">Como <span class="serif" style="color:var(--ac)">utilizar</span></h2>
+  <svg class="a" style="left:0;top:0;pointer-events:none" width="1920" height="1080"><path d="M100 304H530V414H960V524H1390V634H1810" pathLength="1" fill="none" stroke="#2f7de1" stroke-width="2.5" class="dr" id="pth"/>
+    <g fill="#fff" stroke="#2f7de1" stroke-width="3"><circle cx="100" cy="304" r="8"/><circle cx="530" cy="414" r="8"/><circle cx="960" cy="524" r="8"/><circle cx="1390" cy="634" r="8"/></g>
+    <path d="M0 0l0 28 8-7 6 13 6-3-6-13 10-1z" fill="#25282c" stroke="#fff" stroke-width="1.5"><animateMotion dur="9s" repeatCount="indefinite"><mpath href="#pth"/></animateMotion></path></svg>
+  <div class="a rv" style="left:100px;top:340px;width:380px;--i:2"><p class="num">01</p><h3 style="font-size:42px;letter-spacing:-.025em;margin:8px 0">Importar a imagem</h3><p class="tx">Adicione uma ilustração PNG com fundo transparente à composição.</p></div><div class="a rv" style="left:530px;top:450px;width:380px;--i:3"><p class="num">02</p><h3 style="font-size:42px;letter-spacing:-.025em;margin:8px 0">Selecionar a ferramenta</h3><p class="tx">Selecione a camada e ative o Puppet Position Pin na barra de ferramentas.</p></div><div class="a rv" style="left:960px;top:560px;width:380px;--i:4"><p class="num">03</p><h3 style="font-size:42px;letter-spacing:-.025em;margin:8px 0">Adicionar os pontos</h3><p class="tx">Clique nas regiões que deseja movimentar e nas que precisam permanecer estáveis.</p></div><div class="a rv" style="left:1390px;top:670px;width:380px;--i:5"><p class="num">04</p><h3 style="font-size:42px;letter-spacing:-.025em;margin:8px 0">Criar a animação</h3><p class="tx">Avance na linha do tempo e altere a posição dos pins para gerar keyframes.</p></div>
+</section>
+
+<!-- 6 · MEU PROCESSO (print) -->
+<section class="slide" id="s6a" style="background:var(--bl2)">
+  <div class="a" style="left:-300px;top:600px;width:800px;height:800px;border-radius:50%;background:var(--bl);opacity:.6"></div>
+  <p class="mono a rv" style="left:100px;top:80px">Bastidores</p>
+  <h2 class="a big rv" style="left:96px;top:130px;font-size:150px;--i:1">Meu<br><span class="serif" style="color:var(--ac)">processo</span></h2>
+  <p class="a tx rv" style="left:100px;top:600px;width:400px;--i:2" contenteditable="true">Print da composição no After Effects com os pins posicionados e os keyframes na timeline.</p>
+  <div class="a rv" style="left:560px;top:130px;width:1260px;--i:2;background:#25282c;border-radius:14px;box-shadow:0 40px 80px -40px #1c3a5a88;padding:0 0 12px">
+    <div style="height:40px;display:flex;align-items:center;gap:9px;padding:0 18px"><i style="width:12px;height:12px;border-radius:50%;background:#e46a5e"></i><i style="width:12px;height:12px;border-radius:50%;background:#e6b84e"></i><i style="width:12px;height:12px;border-radius:50%;background:#62c26b"></i><span class="mono" style="margin-left:18px;font-size:15px">Composição · Timeline</span></div>
+    <div class="slot" data-src="https://res.cloudinary.com/bpox6ye4/image/upload/v1793772720/processo.png" data-fit="contain" style="position:relative;margin:0 12px;height:690px;border-radius:6px"><p class="mono empty">Clique ou arraste o print aqui (PNG/JPG)</p></div>
+  </div>
+  <div class="bb" style="left:540px;top:110px;width:1300px;height:820px"></div>
+</section>
+
+<!-- 7 · DEMONSTRAÇÃO -->
+<section class="slide" id="s6" style="background:#25282c;color:#f4f3ef">
+  <div class="a" style="left:-240px;top:520px;width:800px;height:800px;border-radius:50%;border:1.5px solid #fff;opacity:.12"></div>
+  <p class="mono a rv" style="left:100px;top:80px;color:#9aa0a2">Demonstração prática</p>
+  <h2 class="a big rv" style="left:96px;top:150px;font-size:150px;--i:1">Na<br><span class="serif" style="color:var(--bl)">prática</span></h2>
+  <p class="a rv" style="left:100px;top:560px;width:460px;font-size:28px;line-height:1.35;color:#c4c8c8;--i:2" contenteditable="true">Animação feita com a Puppet Pin Tool (até 20 s) e um material de apoio ao lado.</p>
+  <!-- Vídeo vertical 2:3 -->
+  <div class="a rv" style="left:680px;top:130px;--i:2"><div class="slot" data-src="https://res.cloudinary.com/bpox6ye4/video/upload/v1793772675/puppet.mp4" data-controls style="position:relative;width:507px;height:760px"><p class="mono empty">Vídeo 2:3 (MP4)<br>clique ou arraste</p></div></div>
+  <!-- Quadrado 1:1 (vídeo ou GIF) -->
+  <div class="a rv" style="left:1290px;top:300px;--i:3"><div class="slot" data-src="https://res.cloudinary.com/bpox6ye4/video/upload/v1793772672/picto.mp4" style="position:relative;width:520px;height:520px"><p class="mono empty">Vídeo ou GIF 1:1<br>clique ou arraste</p></div></div>
+  <p class="mono a" style="left:1290px;top:836px">Apoio · formato quadrado</p>
+  <div class="bb" style="left:664px;top:114px;width:539px;height:792px;border-color:#7fb0ee"></div>
+  <svg class="tl a" style="left:0;top:940px;color:#fff;opacity:.8" data-kf="8,20,31,44" width="1920" height="140"></svg>
+  <div class="ph"></div>
+</section>
+
+<!-- 7 · CONCLUSÃO -->
+<section class="slide" id="s7" style="background:#cfe2f3">
+  <div class="a" style="left:1330px;top:-250px;width:760px;height:760px;border-radius:50%;background:#e8f1f9"></div>
+  <svg class="a" id="m7" style="left:1360px;top:-200px" width="600" height="600" viewBox="0 0 600 600"></svg>
+  <h2 class="a big rv" style="left:92px;top:250px;font-size:330px;--i:1">Obrigado</h2>
+  <h2 class="a big serif rv" style="left:92px;top:560px;font-size:330px;color:var(--ac);--i:2">pela atenção</h2>
+  <div class="bb" style="left:70px;top:590px;width:1480px;height:300px"></div>
+</section>
+</div>
+
+<div class="ui" id="bar"></div>
+<div class="ui" id="toast"></div>
+<div class="ui" id="notes"></div>
+<div class="ui" id="ctl"><button id="pv" aria-label="Anterior">‹</button><span id="cnt">01 / 07</span><button id="nx" aria-label="Próximo">›</button><button id="nt">Notas</button><button id="fs">Tela cheia</button><button id="pdf">Exportar PDF</button></div>
+
+<script>
+ const NS='http://www.w3.org/2000/svg',$=s=>document.querySelector(s);
+const slides=[...document.querySelectorAll('.slide')],stage=$('#stage');let cur=0,printing=false;
+
+/* ---- Mesh: malha triangular deformada por pins ---- */
+const M=[];
+function pinShape(t,col){
+ if(t==='s')return `<rect x="-11" y="-11" width="22" height="22" transform="rotate(45)" fill="#25282c"/><rect x="-4" y="-4" width="8" height="8" transform="rotate(45)" fill="#fff"/>`;
+ if(t==='b')return `<circle r="13" fill="#fff" stroke="${col}" stroke-width="2.5"/><g class="spin"><path d="M0-27A27 27 0 0 1 24 -12" fill="none" stroke="${col}" stroke-width="3" stroke-linecap="round"/></g><circle r="4.5" fill="${col}"/>`;
+ if(t==='a')return `<g class="spin"><circle r="30" fill="none" stroke="${col}" stroke-width="1.5" stroke-dasharray="5 5"/></g><circle r="14" fill="#fff" stroke="${col}" stroke-width="2.5"/><path d="M-8 0H8M0-8V8" stroke="${col}" stroke-width="2"/>`;
+ return `<circle r="13" fill="#fff" stroke="${col}" stroke-width="2.5"/><circle r="4.5" fill="${col}"/>`;
+}
+function mesh(id,c){
+ const s=document.getElementById(id);if(!s)return;
+ const step=2*c.rx/c.n,V=[],map={},col='#2f7de1';
+ for(let j=0;j*step*.866<=2*c.ry;j++)for(let i=-1;i<=c.n+1;i++){
+  const x=c.cx-c.rx+(i+(j%2)*.5)*step,y=c.cy-c.ry+j*step*.866;
+  if(((x-c.cx)/c.rx)**2+((y-c.cy)/c.ry)**2<=1){map[i+','+j]=V.length;V.push([x,y,i,j]);}}
+ const T=[];
+ V.forEach(([x,y,i,j],a)=>{const b=map[(i+1)+','+j],l0=j%2?i:i-1,L=map[l0+','+(j+1)],R=map[(l0+1)+','+(j+1)];
+  if(b!=null&&R!=null)T.push([a,b,R]);if(L!=null&&R!=null)T.push([a,L,R]);});
+ const W=V.map(v=>{const w=c.pins.map(p=>1/(((v[0]-p[0])**2+(v[1]-p[1])**2)+900)),k=w.reduce((a,b)=>a+b,0);return w.map(x=>x/k)});
+ const path=document.createElementNS(NS,'path');
+ path.setAttribute('fill',c.fill||'rgba(47,125,225,.16)');path.setAttribute('stroke',c.stroke||'#25282c');
+ path.setAttribute('stroke-opacity','.55');path.setAttribute('stroke-width','1.2');path.setAttribute('stroke-linejoin','round');
+ s.appendChild(path);
+ const G=c.pins.map(p=>{const g=document.createElementNS(NS,'g');g.innerHTML=pinShape(p[6],col);s.appendChild(g);return g});
+ const out=c.out&&document.querySelector(c.out);
+ const draw=t=>{
+  const D=c.pins.map(p=>[p[2]*Math.sin(t*p[4]+p[5]),p[3]*Math.cos(t*p[4]*.8+p[5])]);
+  const P=V.map((v,a)=>{let x=v[0],y=v[1];D.forEach((d,k)=>{x+=W[a][k]*d[0];y+=W[a][k]*d[1]});return[x,y]});
+  path.setAttribute('d',T.map(t3=>'M'+t3.map(i=>P[i][0].toFixed(1)+' '+P[i][1].toFixed(1)).join('L')+'Z').join(''));
+  G.forEach((g,k)=>g.setAttribute('transform',`translate(${(c.pins[k][0]+D[k][0]).toFixed(1)} ${(c.pins[k][1]+D[k][1]).toFixed(1)})`));
+  if(out)out.textContent=Math.round(c.pins[0][0]+D[0][0]+(c.ox||0))+', '+Math.round(c.pins[0][1]+D[0][1]+(c.oy||0));
+ };
+ draw(1.1);M.push({s,draw});
+}
+// [x, y, amplitudeX, amplitudeY, velocidade, fase, tipo(m|s|b|a)]
+mesh('m1',{cx:450,cy:450,rx:330,ry:380,n:15,out:'#r1',ox:600,oy:210,pins:[[300,250,0,0,0,0,'s'],[640,300,70,60,1,0,'m'],[250,610,60,50,1.3,2,'m'],[620,640,50,70,.9,4,'m'],[450,450,0,0,0,0,'s']]});
+mesh('m2',{cx:400,cy:400,rx:310,ry:330,n:12,out:'#rd2',ox:420,oy:130,pins:[[250,250,40,30,1,0,'m'],[560,300,0,0,0,0,'s'],[330,600,0,0,0,0,'s'],[600,560,45,55,1.4,2,'m']]});
+mesh('m3',{cx:250,cy:170,rx:180,ry:140,n:11,pins:[[150,190,14,12,1,0,'m'],[330,120,16,14,1.3,1,'m'],[310,250,12,12,.9,2,'m']]});
+mesh('m4a',{cx:180,cy:150,rx:140,ry:120,n:9,pins:[[110,210,0,0,0,0,'m'],[260,100,40,30,1.2,0,'m']]});
+mesh('m4b',{cx:180,cy:150,rx:140,ry:120,n:9,pins:[[160,150,0,0,0,0,'s'],[205,150,0,0,0,0,'s'],[90,200,0,0,0,0,'m'],[280,90,45,35,1.2,1,'m']]});
+mesh('m4c',{cx:180,cy:150,rx:140,ry:120,n:9,pins:[[90,150,0,0,0,0,'m'],[270,150,0,55,1.2,0,'b']]});
+mesh('m4d',{cx:180,cy:150,rx:140,ry:120,n:9,pins:[[100,210,0,0,0,0,'m'],[250,110,40,30,1,1,'a']]});
+mesh('m6',{cx:600,cy:337,rx:300,ry:240,n:16,stroke:'#cfe0f2',fill:'rgba(127,176,238,.12)',pins:[[420,250,60,40,1,0,'m'],[800,300,50,60,1.3,2,'m'],[600,560,0,0,0,0,'s'],[560,380,0,0,0,0,'s']]});
+mesh('m7',{cx:300,cy:300,rx:240,ry:240,n:12,pins:[[200,200,40,30,1,0,'m'],[420,380,40,40,1.3,2,'m'],[300,300,0,0,0,0,'s']]});
+const t0=performance.now();
+(function loop(n){if(!printing){const t=(n-t0)/1000;M.forEach(m=>{if(m.s.closest('.slide').classList.contains('on'))m.draw(t)})}requestAnimationFrame(loop)})(t0);
+
+/* ---- Timeline (régua com keyframes) ---- */
+document.querySelectorAll('.tl').forEach(s=>{
+ const kf=s.dataset.kf.split(',').map(Number);let h='<line x1="100" x2="1820" y1="50" y2="50" stroke="currentColor" stroke-width="1.5"/>';
+ for(let i=0;i<=48;i++){const x=100+i*35.8,tall=i%6===0;h+=`<line x1="${x}" x2="${x}" y1="50" y2="${tall?72:62}" stroke="currentColor" opacity=".6"/>`;
+  if(tall)h+=`<text x="${x+5}" y="92" font-family="monospace" font-size="15" fill="currentColor" opacity=".6">0:0${i/6}</text>`;}
+ kf.forEach(i=>{const x=100+i*35.8;h+=`<path d="M${x} 36l11 14-11 14-11-14z" fill="#2f7de1"/>`});
+ s.innerHTML=h;});
+
+/* ---- Caixas de transformação ---- */
+document.querySelectorAll('.bb').forEach(b=>[[0,0],[100,0],[0,100],[100,100]].forEach(([x,y])=>{const d=document.createElement('i');d.className='hd';d.style.left=x+'%';d.style.top=y+'%';b.appendChild(d)}));
+
+/* ---- Espaços de mídia (.slot): defina data-src="arquivo.mp4|png|gif" ou clique/arraste um arquivo ---- */
+const inp=document.createElement('input');inp.type='file';inp.accept='image/*,video/*';let tgt;
+function load(sl,src,isV){const old=sl.querySelector('img,video,iframe');if(old)old.remove();
+ const yt=src.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/);
+ if(yt){const fr=document.createElement('iframe');fr.src='https://www.youtube.com/embed/'+yt[1]+'?rel=0&playsinline=1';fr.allow='autoplay;fullscreen';fr.style.cssText='position:absolute;inset:0;width:100%;height:100%;border:0';sl.prepend(fr);sl.querySelector('.empty').style.display='none';return}
+ const el=document.createElement(isV?'video':'img');el.src=src;el.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:'+(sl.dataset.fit||'cover');
+ if(isV){el.muted=true;el.loop=true;el.playsInline=true;el.controls=sl.hasAttribute('data-controls')}
+ sl.prepend(el);sl.querySelector('.empty').style.display='none'}
+const isVid=n=>/\.(mp4|webm|mov)(\?|$)/i.test(n);
+inp.onchange=()=>{const f=inp.files[0];if(f)load(tgt,URL.createObjectURL(f),f.type.startsWith('video'))};
+document.querySelectorAll('.slot').forEach(sl=>{if(sl.dataset.src)load(sl,sl.dataset.src,isVid(sl.dataset.src));
+ sl.onclick=e=>{if(e.shiftKey){const u=prompt('Cole o link do vídeo/imagem (MP4, GIF, PNG ou YouTube):');if(u)load(sl,u.trim(),isVid(u));return}if(!sl.querySelector('img,video,iframe')){tgt=sl;inp.click()}};
+ sl.ondragover=e=>e.preventDefault();
+ sl.ondrop=e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f)load(sl,URL.createObjectURL(f),f.type.startsWith('video'))}});
+
+/* ---- Navegação ---- */
+function go(n){cur=Math.max(0,Math.min(slides.length-1,n));setTimeout(notes,0);slides.forEach((s,i)=>s.classList.toggle('on',i===cur));
+ $('#cnt').textContent=String(cur+1).padStart(2,'0')+' / 0'+slides.length;$('#bar').style.width=((cur+1)/slides.length*100)+'%';
+ slides.forEach((sl,i)=>sl.querySelectorAll('video').forEach(v=>{if(i===cur){v.currentTime=0;v.play().catch(()=>{})}else v.pause()}))}
+function fit(){const s=Math.min(innerWidth/1920,innerHeight/1080);stage.style.transform=`translate(${(innerWidth-1920*s)/2}px,${(innerHeight-1080*s)/2}px) scale(${s})`}
+function full(){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{})}
+function toast(m){const t=$('#toast');t.textContent=m;t.style.opacity=1;setTimeout(()=>t.style.opacity=0,7000)}
+$('#pv').onclick=()=>go(cur-1);$('#nx').onclick=()=>go(cur+1);$('#fs').onclick=full;
+function notes(){const n=$('#notes'),d=slides[cur].dataset;n.innerHTML=d.notes?`<span style="font:500 14px var(--mono);color:#8fbaf0">Tempo: ${d.time}</span><br>${d.notes}`:'Sem notas neste slide.';}
+$('#nt').onclick=()=>{const n=$('#notes');n.style.display=n.style.display==='block'?'none':'block';notes()};
+$('#pdf').onclick=()=>{toast('No diálogo de impressão: Destino “Salvar como PDF”, Margens “Nenhuma” e ative “Gráficos de segundo plano”.');setTimeout(()=>window.print(),400)};
+addEventListener('keydown',e=>{const k=e.key;
+ if(['ArrowRight','ArrowDown','PageDown',' '].includes(k)){e.preventDefault();go(cur+1)}
+ else if(['ArrowLeft','ArrowUp','PageUp'].includes(k)){e.preventDefault();go(cur-1)}
+ else if(k==='Home')go(0);else if(k==='End')go(slides.length-1);else if(k==='f'||k==='F')full();else if(k==='n'||k==='N')$('#nt').click()});
+addEventListener('beforeprint',()=>{printing=true;M.forEach(m=>m.draw(1.1))});
+addEventListener('afterprint',()=>{printing=false});
+addEventListener('resize',fit);fit();go(0);
+</script>
+</body>
+</html>
